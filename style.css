@@ -1,0 +1,47 @@
+        body{
+            font-family:'Inter', sans-serif;
+            background-color: rgb(21, 20, 69);
+        }
+
+        .code-font{
+            font-family:'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+        }
+
+ /* Efecto glow de neón en los bordes y textos */
+        .neon-glow-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.15);
+            border-color: rgba(6, 182, 212, 0.4);
+        }
+        .neon-glow-emerald {
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+            border-color: rgba(16, 185, 129, 0.4);
+        }
+        /* Líneas punteadas animadas para simular actividad en las conexiones */
+        .active-path {
+            stroke-dasharray: 8, 4;
+            animation: dash 30s linear infinite;
+        }
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -1000;
+            }
+        }
+        /* Estilo de la partícula brillante en movimiento */
+        .glowing-particle {
+            filter: drop-shadow(0 0 6px var(--particle-glow, #06b6d4));
+        }
+        /* Scrollbar personalizado para consola de código */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
