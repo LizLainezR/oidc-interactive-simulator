@@ -45,3 +45,17 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: #475569;
         }
+
+#particle-f1 {
+    r: 5;   
+    fill: #06b6d4; 
+    --particle-glow: #06b6d4; 
+}
+
+.hidden {
+    display: none;
+}
+
+.glowing-particle {
+    filter: drop-shadow(0 0 8px var(--particle-glow));
+}
