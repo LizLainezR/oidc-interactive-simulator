@@ -220,4 +220,294 @@ Content-Type: text/html
             }
         };
 
-  
+        let currentStep = 0;
+        let activeTab = "request";
+        let autoPlayInterval = null;
+
+        // ELEMENTOS CLAVE DEL DOM
+        const stepBadge = document.getElementById("step-badge");
+        const stepShortDesc = document.getElementById("step-short-desc");
+        const stepTitle = document.getElementById("step-title");
+        const stepDesc = document.getElementById("step-desc");
+        const flowOrigin = document.getElementById("flow-origin");
+        const flowDest = document.getElementById("flow-dest");
+        const inspectorChannel = document.getElementById("inspector-channel");
+
+        const viewRequest = document.getElementById("view-request");
+        const viewResponse = document.getElementById("view-response");
+        const viewTokens = document.getElementById("view-tokens");
+
+        const btnPrev = document.getElementById("btn-prev");
+        const btnNext = document.getElementById("btn-next");
+        const btnPlay = document.getElementById("btn-play");
+
+        // CAMBIADOR DE PESTAÑAS EN EL INSPECTOR
+        function setInspectorTab(tabName) {
+            activeTab = tabName;
+            
+            // Actualizar apariencia visual de las pestañas
+            const tabs = ["request", "response", "tokens"];
+            tabs.forEach(t => {
+                const tabEl = document.getElementById(`tab-${t}`);
+                if (t === tabName) {
+                    tabEl.classList.remove("border-transparent", "text-slate-400");
+                    tabEl.classList.add("border-cyan-500", "text-white");
+                } else {
+                    tabEl.classList.remove("border-cyan-500", "text-white");
+                    tabEl.classList.add("border-transparent", "text-slate-400");
+                }
+            });
+
+            // Ocultar/Mostrar contenedores de código
+            document.getElementById("view-request").classList.add("hidden");
+            document.getElementById("view-response").classList.add("hidden");
+            document.getElementById("view-tokens").classList.add("hidden");
+
+            document.getElementById(`view-${tabName}`).classList.remove("hidden");
+        }
+
+        // CONTROLADOR DE PASOS Y RENDERIZADOR DEL DOM
+        function updateUI() {
+            const data = stepsData[currentStep];
+
+            // 1. Actualizar textos descriptivos
+            stepBadge.innerText = `${currentStep} / 8`;
+            stepShortDesc.innerText = data.shortDesc;
+            stepTitle.innerText = data.title;
+            stepDesc.innerHTML = data.desc;
+            flowOrigin.innerText = data.origin;
+            flowDest.innerText = data.dest;
+
+            // 2. Canal de Comunicación e Badge
+            inspectorChannel.innerText = data.channel;
+            inspectorChannel.className = `text-[10px] px-2 py-0.5 font-mono rounded ${data.channelClass}`;
+
+            // 3. Inyectar código en las pestañas
+            viewRequest.innerHTML = data.request;
+            viewResponse.innerHTML = data.response;
+            viewTokens.innerHTML = data.jwt;
+
+            // 4. Habilitar/Deshabilitar botones de navegación
+            btnPrev.disabled = currentStep === 0;
+            if (currentStep === 0) {
+                btnNext.innerHTML = `Iniciar <i class="fa-solid fa-arrow-right"></i>`;
+            } else if (currentStep === 8) {
+                btnNext.innerHTML = `Finalizar <i class="fa-solid fa-check"></i>`;
+            } else {
+                btnNext.innerHTML = `Siguiente <i class="fa-solid fa-arrow-right"></i>`;
+            }
+
+            // 5. Iluminar u opacar capas de fases físicas según el paso activo
+            for (let i = 1; i <= 4; i++) {
+                const phaseCard = document.getElementById(`fase-${i}`);
+                if (data.phase === i) {
+                    phaseCard.classList.remove("opacity-40", "bg-slate-950/40");
+                    phaseCard.classList.add("opacity-100", "bg-slate-900/40", "border-cyan-800/80");
+                    if (i === 2) {
+                        phaseCard.classList.add("neon-glow-emerald");
+                    } else {
+                        phaseCard.classList.add("neon-glow-cyan");
+                    }
+                } else {
+                    phaseCard.classList.remove("opacity-100", "bg-slate-900/40", "border-cyan-800/80", "neon-glow-cyan", "neon-glow-emerald");
+                    phaseCard.classList.add("opacity-40", "bg-slate-950/40");
+                }
+            }
+
+            // 6. Resaltado de Actores en Estados Críticos
+            resetActorHighlights();
+            if (currentStep === 1) {
+                highlightActor("user", "rp");
+            } else if (currentStep === 2) {
+                highlightActor("idp", "user");
+            } else if (currentStep >= 3 && currentStep <= 6) {
+                // Durante token exchange e userInfo, el navegador queda opacado (Demostrando flujo seguro back-channel)
+                highlightActor("rp", "idp");
+                document.getElementById("actor-user").classList.add("opacity-30");
+            } else if (currentStep === 7) {
+                highlightActor("rp", "user");
+            } else if (currentStep === 8) {
+                // Exito completo
+                document.getElementById("actor-user-icon").classList.add("border-emerald-500", "shadow-[0_0_15px_#10b981]");
+                document.getElementById("actor-rp-icon").classList.add("border-emerald-500", "shadow-[0_0_15px_#10b981]");
+                document.getElementById("actor-idp-icon").classList.add("border-emerald-500", "shadow-[0_0_15px_#10b981]");
+                document.getElementById("user-session-badge").innerText = "Sesión Activa";
+                document.getElementById("user-session-badge").className = "mt-2.5 text-[10px] px-2 py-0.5 bg-emerald-500/10 text-emerald-400 font-mono rounded-full border border-emerald-500/20";
+                document.getElementById("rp-status-badge").innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Conectado`;
+            }
+
+            // Cambiar automáticamente de pestaña en el inspector para mejor comprensión visual
+            if (currentStep === 4) {
+                setInspectorTab("tokens");
+            } else if (data.request && data.request !== "") {
+                setInspectorTab("request");
+            }
+        }
+
+        // CONTROLADOR DE PASO INDIVIDUAL (Siguiente / Atrás)
+        function changeStep(dir) {
+            // Detener reproducción automática si el usuario opera manualmente
+            if (autoPlayInterval && dir !== 1) {
+                stopAutoPlay();
+            }
+
+            currentStep += dir;
+            if (currentStep < 0) currentStep = 0;
+            if (currentStep > 8) {
+                currentStep = 0; // Reinicio cíclico
+            }
+
+            updateUI();
+            
+            // Disparar las animaciones físicas de partículas
+            const data = stepsData[currentStep];
+            if (data && data.particleId) {
+                triggerParticle(data);
+            }
+        }
+
+        // LÓGICA DE DETONACIÓN DE PARTÍCULA POR SVG
+        function triggerParticle(stepMeta) {
+            const particle = document.getElementById(stepMeta.particleId);
+            const motion = document.getElementById(stepMeta.motionId);
+            const mpath = document.getElementById(`mpath-f${stepMeta.phase}`);
+            const pathElement = document.getElementById(stepMeta.pathId);
+
+            if (!particle || !motion || !mpath || !pathElement) return;
+
+            // Mostrar partícula antes de animar
+            particle.classList.remove("hidden");
+            
+            // Si es el paso 2 (retorno), hacemos una animación encadenada (IdP -> Browser, luego Browser -> RP)
+            if (currentStep === 2) {
+                // Trayecto 2A: IdP -> Browser
+                mpath.setAttribute("href", `#${stepMeta.pathId}`);
+                pathElement.classList.add("active-path");
+                pathElement.setAttribute("stroke", "#06b6d4");
+                motion.setAttribute("dur", "1s");
+                motion.beginElement();
+
+                // Detonar segundo tramo tras finalización (950ms)
+                setTimeout(() => {
+                    pathElement.classList.remove("active-path");
+                    pathElement.setAttribute("stroke", "#334155");
+
+                    const pathElementSeq = document.getElementById(stepMeta.pathIdSeq);
+                    pathElementSeq.classList.add("active-path");
+                    pathElementSeq.setAttribute("stroke", "#06b6d4");
+                    
+                    mpath.setAttribute("href", `#${stepMeta.pathIdSeq}`);
+                    motion.setAttribute("dur", "0.8s");
+                    motion.beginElement();
+
+                    setTimeout(() => {
+                        pathElementSeq.classList.remove("active-path");
+                        pathElementSeq.setAttribute("stroke", "#334155");
+                        particle.classList.add("hidden");
+                    }, 800);
+
+                }, 1000);
+            } else {
+                // Animación simple de un solo tramo
+                mpath.setAttribute("href", `#${stepMeta.pathId}`);
+                
+                // Iluminar línea físicamente de manera temporal
+                pathElement.classList.add("active-path");
+                const color = stepMeta.phase === 2 ? "#10b981" : (stepMeta.phase === 3 ? "#6366f1" : "#06b6d4");
+                pathElement.setAttribute("stroke", color);
+
+                motion.beginElement();
+
+                // Al finalizar, volver a apagar la línea y ocultar la partícula
+                setTimeout(() => {
+                    pathElement.classList.remove("active-path");
+                    pathElement.setAttribute("stroke", "#334155");
+                    particle.classList.add("hidden");
+                }, 1600);
+            }
+        }
+
+        // MÉTODOS DE SOPORTE PARA RESALTE DE ACTORES
+        function resetActorHighlights() {
+            const actors = ["user", "rp", "idp"];
+            actors.forEach(act => {
+                const card = document.getElementById(`actor-${act}`);
+                card.className = "relative z-10 flex flex-col items-center p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-center transition-all duration-500 opacity-100";
+                
+                const icon = document.getElementById(`actor-${act}-icon`);
+                icon.className = "w-14 h-14 rounded-full bg-slate-800/80 flex items-center justify-center border-2 border-slate-700 text-slate-300 mb-3 relative transition-all duration-300";
+            });
+
+            // Reseteo de badges
+            document.getElementById("user-session-badge").innerText = "Sesión Inactiva";
+            document.getElementById("user-session-badge").className = "mt-2.5 text-[10px] px-2 py-0.5 bg-slate-950 text-slate-500 font-mono rounded-full border border-slate-800";
+            document.getElementById("rp-status-badge").innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> Escuchando Callback`;
+        }
+
+        function highlightActor(...actorKeys) {
+            // Opacar todos primero
+            const actors = ["user", "rp", "idp"];
+            actors.forEach(act => {
+                document.getElementById(`actor-${act}`).classList.add("opacity-40");
+            });
+
+            // Iluminar selectos
+            actorKeys.forEach(act => {
+                const card = document.getElementById(`actor-${act}`);
+                card.classList.remove("opacity-40");
+                card.classList.add("border-cyan-500/50", "bg-slate-900/90");
+                
+                const icon = document.getElementById(`actor-${act}-icon`);
+                icon.classList.remove("border-slate-700");
+                icon.classList.add("border-cyan-400", "text-cyan-400", "bg-slate-900", "shadow-[0_0_12px_rgba(6,182,212,0.2)]");
+            });
+        }
+
+        // MODO AUTO-SIMULACIÓN (REPRODUCCIÓN AUTOMÁTICA)
+        function startAutoPlay() {
+            if (autoPlayInterval) {
+                stopAutoPlay();
+                return;
+            }
+
+            currentStep = 0;
+            updateUI();
+            btnPlay.innerHTML = `<i class="fa-solid fa-square"></i> Detener`;
+            btnPlay.className = "px-4 py-2 rounded-lg bg-red-600/25 hover:bg-red-600/40 text-red-300 font-bold text-xs border border-red-500/30 transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(239,68,68,0.15)]";
+
+            autoPlayInterval = setInterval(() => {
+                if (currentStep < 8) {
+                    changeStep(1);
+                } else {
+                    stopAutoPlay();
+                }
+            }, 4500); // Avanzar cada 4.5 segundos para dar tiempo a ver la partícula
+        }
+
+        function stopAutoPlay() {
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+            }
+            btnPlay.innerHTML = `<i class="fa-solid fa-play"></i> Auto Simular`;
+            btnPlay.className = "px-4 py-2 rounded-lg bg-cyan-600/25 hover:bg-cyan-600/40 text-cyan-300 font-bold text-xs border border-cyan-500/30 transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(6,182,212,0.15)]";
+        }
+
+        // FUNCIÓN AUXILIAR DE COPIADO AL PORTAPAPELES
+        function copyInspectorData() {
+            const dataMap = {
+                "request": viewRequest.innerText,
+                "response": viewResponse.innerText,
+                "tokens": viewTokens.innerText
+            };
+            const activeText = dataMap[activeTab];
+            
+            navigator.clipboard.writeText(activeText).then(() => {
+                alert("Código/Parámetros del inspector copiados al portapapeles con éxito.");
+            }).catch(err => {
+                console.error("Error al copiar al portapapeles: ", err);
+            });
+        }
+
+        // Renderizado Inicial
+        updateUI();
